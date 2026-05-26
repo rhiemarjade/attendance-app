@@ -46,7 +46,7 @@
         .modal-content input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
         .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 
-        .table-container { overflow-x: auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .table-container { overflow-x: auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;}
         table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; white-space: nowrap; }
         th { background-color: #f4f4f9; font-weight: bold; }
@@ -56,6 +56,11 @@
         .cell-A { color: #f44336; font-weight: bold; }
         .cell-L { color: #2196f3; font-weight: bold; }
         .cell-E { color: #9e9e9e; font-weight: bold; }
+
+        /* Summary Card Styles */
+        #individualSummary { display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; justify-content: space-around; align-items: center; font-size: 18px; font-weight: bold; }
+        .summary-item { display: flex; flex-direction: column; align-items: center; }
+        .summary-label { font-size: 12px; text-transform: uppercase; color: #777; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -111,7 +116,10 @@
                     <input type="radio" name="reportMode" id="modeMonthly" checked onchange="toggleReportMode()"> Monthly
                 </label>
                 <label style="font-weight: bold; display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                    <input type="radio" name="reportMode" id="modeCustom" onchange="toggleReportMode()"> Custom Range
+                    <input type="radio" name="reportMode" id="modeCustom" onchange="toggleReportMode()"> Custom
+                </label>
+                <label style="font-weight: bold; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="radio" name="reportMode" id="modeIndividual" onchange="toggleReportMode()"> Individual
                 </label>
             </div>
 
@@ -125,13 +133,19 @@
                 <input type="date" id="reportEndDate" onchange="generateReport()">
             </div>
 
-            <select id="reportSectionSelect" onchange="generateReport()" style="font-weight: bold;">
+            <select id="reportSectionSelect" onchange="onReportSectionChange()" style="font-weight: bold;">
                 <option value="">Select Section</option>
             </select>
             
+            <select id="reportStudentSelect" onchange="generateReport()" style="display: none; font-weight: bold;">
+                <option value="">Select Student</option>
+            </select>
+
             <button style="background:#4caf50; color:white; margin-left:auto;" onclick="exportReportCSV()">Export CSV</button>
         </div>
         
+        <div id="individualSummary"></div>
+
         <div class="table-container">
             <table id="reportTable">
                 </table>
@@ -189,7 +203,9 @@
             document.getElementById('reportMonthSelect').value = '';
             document.getElementById('reportStartDate').value = '';
             document.getElementById('reportEndDate').value = '';
+            document.getElementById('reportStudentSelect').value = '';
             document.getElementById('reportTable').innerHTML = '';
+            document.getElementById('individualSummary').style.display = 'none';
             
             changeAttendanceDate();
             renderCards();
@@ -392,9 +408,44 @@
 
         function toggleReportMode() {
             const isCustom = document.getElementById('modeCustom').checked;
+            const isIndividual = document.getElementById('modeIndividual').checked;
+            
+            // Adjust UI based on mode
             document.getElementById('reportMonthSelect').style.display = isCustom ? 'none' : 'block';
             document.getElementById('customDateContainer').style.display = isCustom ? 'flex' : 'none';
+            document.getElementById('reportStudentSelect').style.display = isIndividual ? 'block' : 'none';
+            
+            // Clear current view
             document.getElementById('reportTable').innerHTML = '';
+            document.getElementById('individualSummary').style.display = 'none';
+
+            // Auto-populate students if switching to individual mode with a section already selected
+            if (isIndividual) {
+                populateReportStudents();
+            } else {
+                generateReport(); 
+            }
+        }
+
+        function onReportSectionChange() {
+            const isIndividual = document.getElementById('modeIndividual').checked;
+            if (isIndividual) {
+                populateReportStudents();
+            }
+            generateReport();
+        }
+
+        function populateReportStudents() {
+            const section = document.getElementById('reportSectionSelect').value;
+            const studentSelect = document.getElementById('reportStudentSelect');
+            studentSelect.innerHTML = '<option value="">Select Student</option>';
+            
+            if (!section) return;
+            
+            const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
+            filteredStudents.forEach(s => {
+                studentSelect.appendChild(new Option(s.name, s.name));
+            });
         }
 
         function prepareReportFilters() {
@@ -421,9 +472,14 @@
 
         function generateReport() {
             const isCustom = document.getElementById('modeCustom').checked;
+            const isIndividual = document.getElementById('modeIndividual').checked;
             const section = document.getElementById('reportSectionSelect').value;
+            
             const table = document.getElementById('reportTable');
+            const summaryDiv = document.getElementById('individualSummary');
+            
             table.innerHTML = '';
+            summaryDiv.style.display = 'none';
 
             if (!section) return;
 
@@ -444,6 +500,7 @@
                     }
                 }
             } else {
+                // Both Monthly and Individual use the month dropdown logic to get dates
                 const monthKey = document.getElementById('reportMonthSelect').value;
                 if (!monthKey) return;
 
@@ -462,65 +519,132 @@
                 reportData[date] = JSON.parse(localStorage.getItem(`attendance_${date}`)) || {};
             });
 
-            const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
+            // -----------------------------
+            // GENERATE INDIVIDUAL REPORT
+            // -----------------------------
+            if (isIndividual) {
+                const studentName = document.getElementById('reportStudentSelect').value;
+                if (!studentName) return;
 
-            let headerHTML = `<tr><th class="col-name">Student Name</th>`;
-            targetDates.forEach(date => {
-                const [y, m, d] = date.split('-');
-                const displayLabel = isCustom ? `${m}/${d}` : d; 
-                headerHTML += `<th>${displayLabel}</th>`;
-            });
-            headerHTML += `<th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>`;
-            
-            let tbodyHTML = '';
-
-            filteredStudents.forEach(student => {
-                let rowHTML = `<tr><td class="col-name">${student.name}</td>`;
                 let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
+                let tbodyHTML = '';
 
                 targetDates.forEach(date => {
-                    const status = reportData[date][student.name] || '-';
-                    if (counts[status] !== undefined) counts[status]++;
+                    const status = reportData[date][studentName] || 'Unmarked';
+                    if (status !== 'Unmarked' && counts[status] !== undefined) counts[status]++;
                     
-                    const displayChar = status === '-' ? '-' : status.charAt(0);
-                    const cellClass = status !== '-' ? `cell-${displayChar}` : '';
-                    rowHTML += `<td class="${cellClass}">${displayChar}</td>`;
+                    // Format Date to: Monday, May 26, 2026
+                    const [y, m, d] = date.split('-');
+                    const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+                    const formattedDate = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                    
+                    const displayStatus = status === 'Unmarked' ? '-' : status;
+                    let cellClass = '';
+                    if (status === 'Present') cellClass = 'cell-P';
+                    else if (status === 'Absent') cellClass = 'cell-A';
+                    else if (status === 'Late') cellClass = 'cell-L';
+                    else if (status === 'Excused') cellClass = 'cell-E';
+
+                    tbodyHTML += `<tr><td style="text-align: left;">${formattedDate}</td><td class="${cellClass}">${displayStatus}</td></tr>`;
                 });
 
-                rowHTML += `<td class="cell-P">${counts.Present}</td>
-                            <td class="cell-A">${counts.Absent}</td>
-                            <td class="cell-L">${counts.Late}</td>
-                            <td class="cell-E">${counts.Excused}</td></tr>`;
-                tbodyHTML += rowHTML;
-            });
+                // Inject Summary Card
+                summaryDiv.innerHTML = `
+                    <div class="summary-item"><span class="summary-label">Present</span><span style="color: #4caf50;">${counts.Present}</span></div>
+                    <div class="summary-item"><span class="summary-label">Absent</span><span style="color: #f44336;">${counts.Absent}</span></div>
+                    <div class="summary-item"><span class="summary-label">Late</span><span style="color: #2196f3;">${counts.Late}</span></div>
+                    <div class="summary-item"><span class="summary-label">Excused</span><span style="color: #9e9e9e;">${counts.Excused}</span></div>
+                `;
+                summaryDiv.style.display = 'flex';
 
-            table.innerHTML = `<thead>${headerHTML}</thead><tbody>${tbodyHTML}</tbody>`;
+                table.innerHTML = `<thead><tr><th style="text-align: left;">Date</th><th>Record</th></tr></thead><tbody>${tbodyHTML}</tbody>`;
+
+            } 
+            // -----------------------------
+            // GENERATE CLASS TABLE REPORT
+            // -----------------------------
+            else {
+                const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
+
+                let headerHTML = `<tr><th class="col-name">Student Name</th>`;
+                targetDates.forEach(date => {
+                    const [y, m, d] = date.split('-');
+                    const displayLabel = isCustom ? `${m}/${d}` : d; 
+                    headerHTML += `<th>${displayLabel}</th>`;
+                });
+                headerHTML += `<th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>`;
+                
+                let tbodyHTML = '';
+
+                filteredStudents.forEach(student => {
+                    let rowHTML = `<tr><td class="col-name">${student.name}</td>`;
+                    let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
+
+                    targetDates.forEach(date => {
+                        const status = reportData[date][student.name] || '-';
+                        if (counts[status] !== undefined) counts[status]++;
+                        
+                        const displayChar = status === '-' ? '-' : status.charAt(0);
+                        const cellClass = status !== '-' ? `cell-${displayChar}` : '';
+                        rowHTML += `<td class="${cellClass}">${displayChar}</td>`;
+                    });
+
+                    rowHTML += `<td class="cell-P">${counts.Present}</td>
+                                <td class="cell-A">${counts.Absent}</td>
+                                <td class="cell-L">${counts.Late}</td>
+                                <td class="cell-E">${counts.Excused}</td></tr>`;
+                    tbodyHTML += rowHTML;
+                });
+
+                table.innerHTML = `<thead>${headerHTML}</thead><tbody>${tbodyHTML}</tbody>`;
+            }
         }
 
         function exportReportCSV() {
             const table = document.getElementById('reportTable');
             if(table.rows.length === 0) { alert("Please generate a report first."); return; }
 
-            let csvContent = "";
-            for (let i = 0; i < table.rows.length; i++) {
-                let rowData = [];
-                for (let j = 0; j < table.rows[i].cells.length; j++) {
-                    rowData.push(`"${table.rows[i].cells[j].innerText}"`);
-                }
-                csvContent += rowData.join(",") + "\n";
-            }
-
-            const section = document.getElementById('reportSectionSelect').value;
+            const isIndividual = document.getElementById('modeIndividual').checked;
             const isCustom = document.getElementById('modeCustom').checked;
+            const section = document.getElementById('reportSectionSelect').value;
             
-            let fileName = `Report_${section}_`;
-            if (isCustom) {
-                const start = document.getElementById('reportStartDate').value;
-                const end = document.getElementById('reportEndDate').value;
-                fileName += `${start}_to_${end}.csv`;
-            } else {
+            let csvContent = "";
+            let fileName = "";
+
+            if (isIndividual) {
+                const studentName = document.getElementById('reportStudentSelect').value;
                 const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
-                fileName += `${month}.csv`;
+                
+                // Add header info for the individual export
+                csvContent += `Student:,${studentName}\nSection:,${section}\nMonth:,${month}\n\n`;
+                
+                for (let i = 0; i < table.rows.length; i++) {
+                    let rowData = [];
+                    for (let j = 0; j < table.rows[i].cells.length; j++) {
+                        rowData.push(`"${table.rows[i].cells[j].innerText}"`);
+                    }
+                    csvContent += rowData.join(",") + "\n";
+                }
+                fileName = `Report_${studentName}_${month}.csv`;
+
+            } else {
+                for (let i = 0; i < table.rows.length; i++) {
+                    let rowData = [];
+                    for (let j = 0; j < table.rows[i].cells.length; j++) {
+                        rowData.push(`"${table.rows[i].cells[j].innerText}"`);
+                    }
+                    csvContent += rowData.join(",") + "\n";
+                }
+                
+                fileName = `Report_${section}_`;
+                if (isCustom) {
+                    const start = document.getElementById('reportStartDate').value;
+                    const end = document.getElementById('reportEndDate').value;
+                    fileName += `${start}_to_${end}.csv`;
+                } else {
+                    const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
+                    fileName += `${month}.csv`;
+                }
             }
             
             const link = document.createElement("a");
