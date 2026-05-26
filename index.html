@@ -84,19 +84,15 @@
     </div>
 
     <div id="view-attendance">
-        <div class="toolbar" id="fileUploadContainer">
-            <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
-            <input type="file" id="csvUpload" accept=".csv">
-        </div>
 
         <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
-            <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
+            <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">No Students Loaded</span>
             
             <input type="date" id="attendanceDate" onchange="changeAttendanceDate()" style="font-weight: bold; border: 2px solid #673ab7; background: #fff;">
             
             <select id="sectionSelect" onchange="changeAttendanceDate()" style="font-weight: bold;"></select>
             <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
-            <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete List</button>
+            <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete Database</button>
         </div>
 
         <div class="toolbar" id="paintbrushTools">
@@ -161,6 +157,16 @@
     </div>
 
     <div id="view-settings" style="display: none;">
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
+            <h2 style="margin-top: 0; color: #333;">Update Student Database</h2>
+            <p style="color: #666; margin-bottom: 20px;">Upload a CSV to add new sections or late enrollees. The app skips duplicates, so your existing students and attendance records remain perfectly intact.</p>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
+                <input type="file" id="csvUpload" accept=".csv" style="padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
+            </div>
+        </div>
+
         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
             <h2 style="margin-top: 0; color: #333;">Daily Section Schedule</h2>
             <p style="color: #666; margin-bottom: 20px;">Check the days each section meets. Only scheduled sections will appear in the Daily Record tab for that date.</p>
@@ -297,9 +303,10 @@
 
         function parseCSV(text) {
             const lines = text.split('\n');
-            students = [];
-            const sections = new Set();
+            let addedCount = 0;
             
+            const existingLookup = new Set(students.map(s => s.name + "||" + s.section));
+
             for(let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if(!line) continue;
@@ -310,23 +317,36 @@
                     const gender = normalizeGender(cols[1].replace(/(^"|"$)/g, ''));
                     const section = cols[3].replace(/(^"|"$)/g, '').trim();
                     
-                    students.push({ name: name, gender: gender, section: section });
-                    sections.add(section);
-                    if(!attendance[name]) attendance[name] = 'Unmarked';
+                    const studentKey = name + "||" + section;
+                    
+                    if (!existingLookup.has(studentKey)) {
+                        students.push({ name: name, gender: gender, section: section });
+                        if(!attendance[name]) attendance[name] = 'Unmarked';
+                        existingLookup.add(studentKey);
+                        addedCount++;
+                    }
                 }
             }
+            
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             
-            const uniqueSections = Array.from(sections).sort();
+            const uniqueSections = [...new Set(students.map(s => s.section))].sort();
+            updateUIForSavedRoster();
             buildSettingsUI(uniqueSections);
             populateSectionDropdown(uniqueSections);
-            updateUIForSavedRoster();
+            
+            alert(`Database updated. ${addedCount} new students added.`);
+            
+            document.getElementById('csvUpload').value = '';
         }
 
         function updateUIForSavedRoster() {
-            document.getElementById('fileUploadContainer').style.display = 'none';
-            document.getElementById('rosterStatusContainer').style.display = 'flex';
-            updateRosterStatus();
+            if (students.length > 0) {
+                document.getElementById('rosterStatusContainer').style.display = 'flex';
+                updateRosterStatus();
+            } else {
+                document.getElementById('rosterStatusContainer').style.display = 'none';
+            }
         }
 
         function updateRosterStatus() {
@@ -344,7 +364,7 @@
         }
 
         function clearRoster() {
-            if(confirm("Delete the entire student list from memory? You will need to upload a new CSV.")) {
+            if(confirm("Delete the entire student database from memory? This cannot be undone.")) {
                 localStorage.removeItem('savedStudentRoster');
                 location.reload();
             }
