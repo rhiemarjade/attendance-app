@@ -65,7 +65,7 @@
     <div class="header">
         <div class="tab-nav">
             <button class="tab-btn active" id="btnTabAttendance" onclick="switchTab('attendance')">Daily Record</button>
-            <button class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">Monthly Reports</button>
+            <button class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">Reports</button>
         </div>
         <div class="clock" id="liveClock">Loading time...</div>
     </div>
@@ -101,14 +101,31 @@
     </div>
 
     <div id="view-reports" style="display: none;">
-        <div class="toolbar">
+        <div class="toolbar" style="gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px; border-right: 2px solid #ccc; padding-right: 15px;">
+                <label style="font-weight: bold; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="radio" name="reportMode" id="modeMonthly" checked onchange="toggleReportMode()"> Monthly
+                </label>
+                <label style="font-weight: bold; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="radio" name="reportMode" id="modeCustom" onchange="toggleReportMode()"> Custom Range
+                </label>
+            </div>
+
             <select id="reportMonthSelect" onchange="generateReport()" style="font-weight: bold;">
                 <option value="">Select Month</option>
             </select>
+
+            <div id="customDateContainer" style="display: none; align-items: center; gap: 5px;">
+                <input type="date" id="reportStartDate" onchange="generateReport()">
+                <span style="font-weight: bold;">to</span>
+                <input type="date" id="reportEndDate" onchange="generateReport()">
+            </div>
+
             <select id="reportSectionSelect" onchange="generateReport()" style="font-weight: bold;">
                 <option value="">Select Section</option>
             </select>
-            <button style="background:#4caf50; color:white; margin-left:auto;" onclick="exportReportCSV()">Export Monthly CSV</button>
+            
+            <button style="background:#4caf50; color:white; margin-left:auto;" onclick="exportReportCSV()">Export CSV</button>
         </div>
         
         <div class="table-container">
@@ -322,7 +339,14 @@
             closeAddStudentModal();
         }
 
-        // --- NEW REPORTING FUNCTIONS ---
+        // --- REPORTING FUNCTIONS ---
+
+        function toggleReportMode() {
+            const isCustom = document.getElementById('modeCustom').checked;
+            document.getElementById('reportMonthSelect').style.display = isCustom ? 'none' : 'block';
+            document.getElementById('customDateContainer').style.display = isCustom ? 'flex' : 'none';
+            document.getElementById('reportTable').innerHTML = ''; // Clear table on switch
+        }
 
         function prepareReportFilters() {
             const months = new Set();
@@ -330,7 +354,7 @@
                 const key = localStorage.key(i);
                 if (key.startsWith('attendance_')) {
                     const datePart = key.replace('attendance_', ''); 
-                    const monthKey = datePart.substring(0, 7); // Extracts YYYY-MM
+                    const monthKey = datePart.substring(0, 7);
                     months.add(monthKey);
                 }
             }
@@ -347,36 +371,56 @@
         }
 
         function generateReport() {
-            const monthKey = document.getElementById('reportMonthSelect').value;
+            const isCustom = document.getElementById('modeCustom').checked;
             const section = document.getElementById('reportSectionSelect').value;
             const table = document.getElementById('reportTable');
             table.innerHTML = '';
 
-            if (!monthKey || !section) return;
+            if (!section) return;
 
-            // Gather all dates for this month from memory
-            let monthDates = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith(`attendance_${monthKey}`)) {
-                    monthDates.push(key.replace('attendance_', ''));
+            let targetDates = [];
+
+            if (isCustom) {
+                const startDate = document.getElementById('reportStartDate').value;
+                const endDate = document.getElementById('reportEndDate').value;
+                if (!startDate || !endDate) return;
+
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('attendance_')) {
+                        const dateStr = key.replace('attendance_', '');
+                        if (dateStr >= startDate && dateStr <= endDate) {
+                            targetDates.push(dateStr);
+                        }
+                    }
+                }
+            } else {
+                const monthKey = document.getElementById('reportMonthSelect').value;
+                if (!monthKey) return;
+
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith(`attendance_${monthKey}`)) {
+                        targetDates.push(key.replace('attendance_', ''));
+                    }
                 }
             }
-            monthDates.sort(); // Order from 1st to 31st
 
-            // Retrieve data for those dates
-            const monthlyData = {};
-            monthDates.forEach(date => {
-                monthlyData[date] = JSON.parse(localStorage.getItem(`attendance_${date}`)) || {};
+            targetDates.sort();
+
+            const reportData = {};
+            targetDates.forEach(date => {
+                reportData[date] = JSON.parse(localStorage.getItem(`attendance_${date}`)) || {};
             });
 
             const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
 
             // Build Header Row
             let headerHTML = `<tr><th class="col-name">Student Name</th>`;
-            monthDates.forEach(date => {
-                const day = date.split('-')[2]; // Just show the day number
-                headerHTML += `<th>${day}</th>`;
+            targetDates.forEach(date => {
+                const [y, m, d] = date.split('-');
+                const displayLabel = isCustom ? `${m}/${d}` : d; // Show month/day for custom ranges
+                headerHTML += `<th>${displayLabel}</th>`;
             });
             headerHTML += `<th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>`;
             
@@ -387,8 +431,8 @@
                 let rowHTML = `<tr><td class="col-name">${student.name}</td>`;
                 let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
 
-                monthDates.forEach(date => {
-                    const status = monthlyData[date][student.name] || '-';
+                targetDates.forEach(date => {
+                    const status = reportData[date][student.name] || '-';
                     if (counts[status] !== undefined) counts[status]++;
                     
                     const displayChar = status === '-' ? '-' : status.charAt(0);
@@ -419,12 +463,22 @@
                 csvContent += rowData.join(",") + "\n";
             }
 
-            const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
             const section = document.getElementById('reportSectionSelect').value;
+            const isCustom = document.getElementById('modeCustom').checked;
+            
+            let fileName = `Report_${section}_`;
+            if (isCustom) {
+                const start = document.getElementById('reportStartDate').value;
+                const end = document.getElementById('reportEndDate').value;
+                fileName += `${start}_to_${end}.csv`;
+            } else {
+                const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
+                fileName += `${month}.csv`;
+            }
             
             const link = document.createElement("a");
             link.setAttribute("href", URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })));
-            link.setAttribute("download", `Report_${section}_${month}.csv`);
+            link.setAttribute("download", fileName);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
