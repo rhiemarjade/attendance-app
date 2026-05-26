@@ -1,1 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Attendance">
+    <title>Offline Attendance</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; user-select: none; margin: 0; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .clock { font-size: 18px; font-weight: bold; color: #333; }
+        
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); align-items: center; }
+        select, button, input { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #ccc; }
+        button { cursor: pointer; border: none; font-weight: bold; }
+        
+        .mode-present { background: #4caf50; color: white; }
+        .mode-absent { background: #f44336; color: white; }
+        .mode-late { background: #2196f3; color: white; }
+        .mode-excused { background: #ff9800; color: white; }
+        .mode-active { outline: 3px solid #333; outline-offset: 2px; }
+        .btn-save { background: #673ab7; color: white; }
 
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+        .card { 
+            background: white; padding: 15px 5px; text-align: center; 
+            border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer; border: 2px solid transparent; font-size: 14px;
+        }
+        
+        .status-Unmarked { background: #ffffff; border-color: #e0e0e0; }
+        .status-Present { background: #e8f5e9; border-color: #4caf50; }
+        .status-Absent { background: #ffebee; border-color: #f44336; }
+        .status-Late { background: #e3f2fd; border-color: #2196f3; }
+        .status-Excused { background: #fff3e0; border-color: #ff9800; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2 style="margin: 0;">Attendance App</h2>
+        <div class="clock" id="liveClock">Loading time...</div>
+    </div>
+
+    <div class="toolbar">
+        <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
+        <input type="file" id="csvUpload" accept=".csv">
+        <select id="sectionSelect" onchange="renderCards()"></select>
+    </div>
+
+    <div class="toolbar" id="paintbrushTools">
+        <strong>Paintbrush:</strong>
+        <button class="mode-absent mode-active" onclick="setMode('Absent')" id="btn-Absent">Absent</button>
+        <button class="mode-late" onclick="setMode('Late')" id="btn-Late">Late</button>
+        <button class="mode-excused" onclick="setMode('Excused')" id="btn-Excused">Excused</button>
+        <button class="mode-present" onclick="setMode('Present')" id="btn-Present">Present</button>
+        
+        <div style="margin-left: auto; display: flex; gap: 10px;">
+            <button style="background:#4caf50; color:white;" onclick="markAllVisible('Present')">Mark All Present</button>
+            <button style="background:#d32f2f; color:white;" onclick="markAllVisible('Absent')">Mark All Absent</button>
+            <button class="btn-save" onclick="saveDailyRecord()">Save Record</button>
+        </div>
+    </div>
+
+    <div class="grid" id="studentGrid"></div>
+
+    <script>
+        let students = []; 
+        let attendance = {}; 
+        let currentMode = "Absent"; 
+
+        function updateClock() {
+            const now = new Date();
+            const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+            const dateStr = now.toLocaleDateString(undefined, options);
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('liveClock').innerText = `${dateStr} | ${timeStr}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        document.getElementById('csvUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const text = event.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(text) {
+            const lines = text.split('\n');
+            students = [];
+            const sections = new Set();
+            
+            for(let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if(!line) continue;
+                
+                const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                
+                if(cols.length >= 4) {
+                    const name = cols[0].replace(/(^"|"$)/g, '').trim();
+                    const section = cols[3].replace(/(^"|"$)/g, '').trim();
+                    
+                    students.push({ name: name, section: section });
+                    sections.add(section);
+                    
+                    if(!attendance[name]) attendance[name] = 'Unmarked';
+                }
+            }
+            
+            // Save the newly uploaded roster to local storage permanently
+            localStorage.setItem('savedStudentRoster', JSON.stringify(students));
+            
+            populateSectionDropdown(Array.from(sections).sort());
+        }
+
+        function populateSectionDropdown(sections) {
+            const select = document.getElementById('sectionSelect');
+            select.innerHTML = '<option value="all">Select a Section</option>';
+            sections.forEach(sec => {
+                const option = document.createElement('option');
+                option.value = sec;
+                option.innerText = sec;
+                select.appendChild(option);
+            });
+            
+            const dateKey = new Date().toISOString().split('T')[0];
+            const savedData = JSON.parse(localStorage.getItem('attendance_' + dateKey));
+            if (savedData) {
+                attendance = savedData;
+            }
+            renderCards();
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('#paintbrushTools button').forEach(btn => btn.classList.remove('mode-active'));
+            document.getElementById('btn-' + mode).classList.add('mode-active');
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('studentGrid');
+            grid.innerHTML = '';
+            
+            const selectedSection = document.getElementById('sectionSelect').value;
+            if(selectedSection === 'all') return; 
+            
+            students.forEach(student => {
+                if(student.section !== selectedSection) return;
+                
+                const status = attendance[student.name] || 'Unmarked';
+                const card = document.createElement('div');
+                card.className = `card status-${status}`;
+                card.innerText = student.name;
+                card.onclick = () => {
+                    attendance[student.name] = currentMode;
+                    renderCards();
+                };
+                grid.appendChild(card);
+            });
+        }
+
+        function markAllVisible(status) {
+            const selectedSection = document.getElementById('sectionSelect').value;
+            if(selectedSection === 'all') {
+                alert("Please select a specific section first.");
+                return;
+            }
+            
+            students.forEach(student => {
+                if(student.section === selectedSection) {
+                    attendance[student.name] = status;
+                }
+            });
+            renderCards();
+        }
+
+        function saveDailyRecord() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const dateKey = `${year}-${month}-${day}`;
+            
+            let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
+            Object.assign(existingData, attendance);
+            
+            localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
+            alert("Attendance successfully saved for " + dateKey);
+        }
+
+        function downloadTemplate() {
+            const csvContent = "Name,Gender,Grade,Section\n";
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "Student_List_Template.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Automatic Roster Loading Sequence
+        function loadSavedRoster() {
+            const savedRoster = localStorage.getItem('savedStudentRoster');
+            if (savedRoster) {
+                students = JSON.parse(savedRoster);
+                const sections = new Set();
+                
+                students.forEach(student => {
+                    sections.add(student.section);
+                    if(!attendance[student.name]) {
+                        attendance[student.name] = 'Unmarked';
+                    }
+                });
+                
+                populateSectionDropdown(Array.from(sections).sort());
+            }
+        }
+        
+        // Execute the loader immediately when the app opens
+        loadSavedRoster();
+
+    </script>
+</body>
+</html>
