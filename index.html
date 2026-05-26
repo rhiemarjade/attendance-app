@@ -20,7 +20,8 @@
         .mode-present { background: #4caf50; color: white; }
         .mode-absent { background: #f44336; color: white; }
         .mode-late { background: #2196f3; color: white; }
-        .mode-excused { background: #ff9800; color: white; }
+        /* Updated high-contrast deep orange for Excused */
+        .mode-excused { background: #d84315; color: white; } 
         .mode-active { outline: 3px solid #333; outline-offset: 2px; }
         .btn-save { background: #673ab7; color: white; }
 
@@ -35,7 +36,8 @@
         .status-Present { background: #e8f5e9; border-color: #4caf50; }
         .status-Absent { background: #ffebee; border-color: #f44336; }
         .status-Late { background: #e3f2fd; border-color: #2196f3; }
-        .status-Excused { background: #fff3e0; border-color: #ff9800; }
+        /* Updated high-contrast background and border for Excused cards */
+        .status-Excused { background: #fbe9e7; border-color: #d84315; } 
 
         /* Modal Styles */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
@@ -58,8 +60,8 @@
 
     <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
         <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
-        <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
         <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
+        <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
         <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
     </div>
 
@@ -270,14 +272,12 @@
             }
         }
 
-        // --- New Modal Functions ---
         function openAddStudentModal() {
             document.getElementById('addStudentModal').style.display = 'flex';
         }
 
         function closeAddStudentModal() {
             document.getElementById('addStudentModal').style.display = 'none';
-            // Clear the text fields
             document.getElementById('newStudentName').value = '';
             document.getElementById('newStudentGender').value = '';
             document.getElementById('newStudentGrade').value = '';
@@ -293,21 +293,17 @@
                 return;
             }
 
-            // Add to the local arrays
             students.push({ name: name, section: section });
             attendance[name] = 'Unmarked';
             
-            // Save updated roster to memory
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             
-            // Rebuild the section list in case they added a completely new section
             const sections = new Set();
             students.forEach(s => sections.add(s.section));
             
             updateUIForSavedRoster(students.length);
             populateSectionDropdown(Array.from(sections).sort());
             
-            // Automatically switch the view to the new student's section
             document.getElementById('sectionSelect').value = section;
             renderCards();
 
