@@ -65,7 +65,10 @@
             <button class="tab-btn active" id="btnTabAttendance" onclick="switchTab('attendance')">Daily Record</button>
             <button class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">Reports</button>
         </div>
-        <div class="clock" id="liveClock">Loading time...</div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button onclick="resetFilters()" style="background: none; border: none; font-size: 24px; cursor: pointer; padding: 0;" title="Reset View to Today">🔄</button>
+            <div class="clock" id="liveClock">Loading time...</div>
+        </div>
     </div>
 
     <div id="view-attendance">
@@ -172,6 +175,26 @@
             document.getElementById('attendanceDate').value = `${yyyy}-${mm}-${dd}`;
         }
 
+        function resetFilters() {
+            switchTab('attendance');
+            initializeDateInput();
+            document.getElementById('sectionSelect').value = 'all';
+            
+            if (document.getElementById('reportSectionSelect')) {
+                document.getElementById('reportSectionSelect').value = '';
+            }
+            
+            document.getElementById('modeMonthly').checked = true;
+            toggleReportMode();
+            document.getElementById('reportMonthSelect').value = '';
+            document.getElementById('reportStartDate').value = '';
+            document.getElementById('reportEndDate').value = '';
+            document.getElementById('reportTable').innerHTML = '';
+            
+            changeAttendanceDate();
+            renderCards();
+        }
+
         function switchTab(tab) {
             document.getElementById('view-attendance').style.display = tab === 'attendance' ? 'block' : 'none';
             document.getElementById('view-reports').style.display = tab === 'reports' ? 'block' : 'none';
@@ -244,19 +267,17 @@
             });
             
             if (sections.length > 0) selectAtt.value = sections[0];
-            changeAttendanceDate(); // Load initial data for today's date
+            changeAttendanceDate(); 
         }
 
         function changeAttendanceDate() {
             const selectedDate = document.getElementById('attendanceDate').value;
             if (!selectedDate) return;
             
-            // 1. Reset all current attendance states to blank
             students.forEach(student => {
                 attendance[student.name] = 'Unmarked';
             });
             
-            // 2. Look for saved records on this specific date
             const savedData = JSON.parse(localStorage.getItem('attendance_' + selectedDate));
             if (savedData) {
                 Object.assign(attendance, savedData);
