@@ -27,7 +27,8 @@
         .mode-excused { background: #9e9e9e; color: white; } 
         .mode-edit { background: #607d8b; color: white; }
         .mode-active { outline: 3px solid #333; outline-offset: 2px; }
-        .btn-save { background: #673ab7; color: white; }
+        .btn-save { background: #673ab7; color: white; transition: background 0.3s ease; }
+        .btn-unsaved { background: #f44336 !important; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
         .card { 
@@ -110,7 +111,7 @@
                 <button style="background:#4caf50; color:white;" onclick="markAllVisible('Present')">Mark All Present</button>
                 <button style="background:#d32f2f; color:white;" onclick="markAllVisible('Absent')">Mark All Absent</button>
                 <button style="background:#f44336; color:white;" onclick="clearSectionDailyRecord()">Clear Section</button>
-                <button class="btn-save" onclick="saveDailyRecord()">Save Record</button>
+                <button class="btn-save" id="btn-SaveRecord" onclick="saveDailyRecord()">Save Record</button>
             </div>
         </div>
 
@@ -204,6 +205,7 @@
         let currentMode = "Absent"; 
         let sectionSchedule = JSON.parse(localStorage.getItem('sectionSchedule')) || {};
         let editingOriginalName = "";
+        let hasUnsavedChanges = false;
 
         function updateClock() {
             const now = new Date();
@@ -214,6 +216,18 @@
         }
         setInterval(updateClock, 1000);
         updateClock();
+
+        function setUnsavedChanges(status) {
+            hasUnsavedChanges = status;
+            const btnSave = document.getElementById('btn-SaveRecord');
+            if (status) {
+                btnSave.classList.add('btn-unsaved');
+                btnSave.innerText = 'Save Required';
+            } else {
+                btnSave.classList.remove('btn-unsaved');
+                btnSave.innerText = 'Save Record';
+            }
+        }
 
         function initializeDateInput() {
             const today = new Date();
@@ -411,6 +425,7 @@
             const savedData = JSON.parse(localStorage.getItem('attendance_' + selectedDate));
             if (savedData) Object.assign(attendance, savedData);
             
+            setUnsavedChanges(false);
             renderCards();
         }
 
@@ -438,6 +453,7 @@
                         openEditStudentModal(student.name, student.section);
                     } else {
                         attendance[student.name] = currentMode;
+                        setUnsavedChanges(true);
                         renderCards();
                     }
                 };
@@ -451,6 +467,7 @@
             students.forEach(student => {
                 if(student.section === selectedSection) attendance[student.name] = status;
             });
+            setUnsavedChanges(true);
             renderCards();
         }
 
@@ -474,6 +491,7 @@
                 });
                 
                 localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
+                setUnsavedChanges(false);
                 renderCards();
             }
         }
@@ -485,6 +503,8 @@
             let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
             Object.assign(existingData, attendance);
             localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
+            
+            setUnsavedChanges(false);
             alert("Attendance successfully saved for " + dateKey);
         }
 
