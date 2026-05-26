@@ -36,6 +36,12 @@
         .status-Absent { background: #ffebee; border-color: #f44336; }
         .status-Late { background: #e3f2fd; border-color: #2196f3; }
         .status-Excused { background: #fff3e0; border-color: #ff9800; }
+
+        /* Modal Styles */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; width: 320px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .modal-content input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
+        .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -52,6 +58,7 @@
 
     <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
         <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
+        <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
         <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
         <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
     </div>
@@ -72,6 +79,20 @@
 
     <div class="grid" id="studentGrid"></div>
 
+    <div class="modal-overlay" id="addStudentModal">
+        <div class="modal-content">
+            <h3 style="margin: 0; color: #333;">Add New Student</h3>
+            <input type="text" id="newStudentName" placeholder="Full Name (Last, First)">
+            <input type="text" id="newStudentGender" placeholder="Gender">
+            <input type="text" id="newStudentGrade" placeholder="Grade">
+            <input type="text" id="newStudentSection" placeholder="Section">
+            <div class="modal-buttons">
+                <button style="background:#e0e0e0; color:#333;" onclick="closeAddStudentModal()">Cancel</button>
+                <button style="background:#4caf50; color:white;" onclick="saveNewStudent()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let students = []; 
         let attendance = {}; 
@@ -88,169 +109,3 @@
         updateClock();
 
         document.getElementById('csvUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const text = event.target.result;
-                parseCSV(text);
-            };
-            reader.readAsText(file);
-        });
-
-        function parseCSV(text) {
-            const lines = text.split('\n');
-            students = [];
-            const sections = new Set();
-            
-            for(let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if(!line) continue;
-                
-                const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                
-                if(cols.length >= 4) {
-                    const name = cols[0].replace(/(^"|"$)/g, '').trim();
-                    const section = cols[3].replace(/(^"|"$)/g, '').trim();
-                    
-                    students.push({ name: name, section: section });
-                    sections.add(section);
-                    
-                    if(!attendance[name]) attendance[name] = 'Unmarked';
-                }
-            }
-            
-            localStorage.setItem('savedStudentRoster', JSON.stringify(students));
-            updateUIForSavedRoster(students.length);
-            populateSectionDropdown(Array.from(sections).sort());
-        }
-
-        function updateUIForSavedRoster(count) {
-            document.getElementById('fileUploadContainer').style.display = 'none';
-            document.getElementById('rosterStatusContainer').style.display = 'flex';
-            document.getElementById('rosterStatusText').innerText = count + ' Students Loaded';
-        }
-
-        function clearRoster() {
-            if(confirm("Delete the current student list from memory? You will need to upload a new CSV.")) {
-                localStorage.removeItem('savedStudentRoster');
-                location.reload();
-            }
-        }
-
-        function populateSectionDropdown(sections) {
-            const select = document.getElementById('sectionSelect');
-            select.innerHTML = '<option value="all">Select a Section</option>';
-            sections.forEach(sec => {
-                const option = document.createElement('option');
-                option.value = sec;
-                option.innerText = sec;
-                select.appendChild(option);
-            });
-            
-            const dateKey = new Date().toISOString().split('T')[0];
-            const savedData = JSON.parse(localStorage.getItem('attendance_' + dateKey));
-            if (savedData) {
-                attendance = savedData;
-            }
-
-            if (sections.length > 0) {
-                select.value = sections[0];
-            }
-
-            renderCards();
-        }
-
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('#paintbrushTools button').forEach(btn => btn.classList.remove('mode-active'));
-            document.getElementById('btn-' + mode).classList.add('mode-active');
-        }
-
-        function renderCards() {
-            const grid = document.getElementById('studentGrid');
-            grid.innerHTML = '';
-            
-            const selectedSection = document.getElementById('sectionSelect').value;
-            if(selectedSection === 'all') return; 
-            
-            students.forEach(student => {
-                if(student.section !== selectedSection) return;
-                
-                const status = attendance[student.name] || 'Unmarked';
-                const card = document.createElement('div');
-                card.className = `card status-${status}`;
-                card.innerText = student.name;
-                card.onclick = () => {
-                    attendance[student.name] = currentMode;
-                    renderCards();
-                };
-                grid.appendChild(card);
-            });
-        }
-
-        function markAllVisible(status) {
-            const selectedSection = document.getElementById('sectionSelect').value;
-            if(selectedSection === 'all') {
-                alert("Please select a specific section first.");
-                return;
-            }
-            
-            students.forEach(student => {
-                if(student.section === selectedSection) {
-                    attendance[student.name] = status;
-                }
-            });
-            renderCards();
-        }
-
-        function saveDailyRecord() {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const dateKey = `${year}-${month}-${day}`;
-            
-            let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
-            Object.assign(existingData, attendance);
-            
-            localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
-            alert("Attendance successfully saved for " + dateKey);
-        }
-
-        function downloadTemplate() {
-            const csvContent = "Name,Gender,Grade,Section\n";
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", "Student_List_Template.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        function loadSavedRoster() {
-            const savedRoster = localStorage.getItem('savedStudentRoster');
-            if (savedRoster) {
-                students = JSON.parse(savedRoster);
-                const sections = new Set();
-                
-                students.forEach(student => {
-                    sections.add(student.section);
-                    if(!attendance[student.name]) {
-                        attendance[student.name] = 'Unmarked';
-                    }
-                });
-                
-                updateUIForSavedRoster(students.length);
-                populateSectionDropdown(Array.from(sections).sort());
-            }
-        }
-        
-        loadSavedRoster();
-
-    </script>
-</body>
-</html>
