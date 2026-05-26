@@ -45,10 +45,15 @@
         <div class="clock" id="liveClock">Loading time...</div>
     </div>
 
-    <div class="toolbar">
+    <div class="toolbar" id="fileUploadContainer">
         <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
         <input type="file" id="csvUpload" accept=".csv">
-        <select id="sectionSelect" onchange="renderCards()"></select>
+    </div>
+
+    <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
+        <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
+        <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
+        <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
     </div>
 
     <div class="toolbar" id="paintbrushTools">
@@ -116,10 +121,22 @@
                 }
             }
             
-            // Save the newly uploaded roster to local storage permanently
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
-            
+            updateUIForSavedRoster(students.length);
             populateSectionDropdown(Array.from(sections).sort());
+        }
+
+        function updateUIForSavedRoster(count) {
+            document.getElementById('fileUploadContainer').style.display = 'none';
+            document.getElementById('rosterStatusContainer').style.display = 'flex';
+            document.getElementById('rosterStatusText').innerText = count + ' Students Loaded';
+        }
+
+        function clearRoster() {
+            if(confirm("Delete the current student list from memory? You will need to upload a new CSV.")) {
+                localStorage.removeItem('savedStudentRoster');
+                location.reload();
+            }
         }
 
         function populateSectionDropdown(sections) {
@@ -137,6 +154,11 @@
             if (savedData) {
                 attendance = savedData;
             }
+
+            if (sections.length > 0) {
+                select.value = sections[0];
+            }
+
             renderCards();
         }
 
@@ -209,7 +231,6 @@
             document.body.removeChild(link);
         }
 
-        // Automatic Roster Loading Sequence
         function loadSavedRoster() {
             const savedRoster = localStorage.getItem('savedStudentRoster');
             if (savedRoster) {
@@ -223,11 +244,11 @@
                     }
                 });
                 
+                updateUIForSavedRoster(students.length);
                 populateSectionDropdown(Array.from(sections).sort());
             }
         }
         
-        // Execute the loader immediately when the app opens
         loadSavedRoster();
 
     </script>
