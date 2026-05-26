@@ -13,7 +13,6 @@
         .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .clock { font-size: 18px; font-weight: bold; color: #333; }
         
-        /* Tab Navigation Styles */
         .tab-nav { display: flex; gap: 10px; }
         .tab-btn { padding: 10px 20px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; background: #e0e0e0; color: #555; }
         .tab-btn.active { background: #673ab7; color: white; }
@@ -47,7 +46,6 @@
         .modal-content input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
         .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 
-        /* Report Table Styles */
         .table-container { overflow-x: auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; white-space: nowrap; }
@@ -78,6 +76,9 @@
 
         <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
             <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
+            
+            <input type="date" id="attendanceDate" onchange="changeAttendanceDate()" style="font-weight: bold; border: 2px solid #673ab7; background: #fff;">
+            
             <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
             <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
             <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
@@ -163,6 +164,14 @@
         setInterval(updateClock, 1000);
         updateClock();
 
+        function initializeDateInput() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('attendanceDate').value = `${yyyy}-${mm}-${dd}`;
+        }
+
         function switchTab(tab) {
             document.getElementById('view-attendance').style.display = tab === 'attendance' ? 'block' : 'none';
             document.getElementById('view-reports').style.display = tab === 'reports' ? 'block' : 'none';
@@ -234,11 +243,25 @@
                 selectRep.appendChild(new Option(sec, sec));
             });
             
-            const dateKey = new Date().toISOString().split('T')[0];
-            const savedData = JSON.parse(localStorage.getItem('attendance_' + dateKey));
-            if (savedData) attendance = savedData;
-
             if (sections.length > 0) selectAtt.value = sections[0];
+            changeAttendanceDate(); // Load initial data for today's date
+        }
+
+        function changeAttendanceDate() {
+            const selectedDate = document.getElementById('attendanceDate').value;
+            if (!selectedDate) return;
+            
+            // 1. Reset all current attendance states to blank
+            students.forEach(student => {
+                attendance[student.name] = 'Unmarked';
+            });
+            
+            // 2. Look for saved records on this specific date
+            const savedData = JSON.parse(localStorage.getItem('attendance_' + selectedDate));
+            if (savedData) {
+                Object.assign(attendance, savedData);
+            }
+            
             renderCards();
         }
 
@@ -282,8 +305,11 @@
         }
 
         function saveDailyRecord() {
-            const today = new Date();
-            const dateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const dateKey = document.getElementById('attendanceDate').value;
+            if (!dateKey) {
+                alert("Please select a valid date from the calendar.");
+                return;
+            }
             
             let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
             Object.assign(existingData, attendance);
@@ -301,6 +327,8 @@
         }
 
         function loadSavedRoster() {
+            initializeDateInput();
+            
             const savedRoster = localStorage.getItem('savedStudentRoster');
             if (savedRoster) {
                 students = JSON.parse(savedRoster);
@@ -345,7 +373,7 @@
             const isCustom = document.getElementById('modeCustom').checked;
             document.getElementById('reportMonthSelect').style.display = isCustom ? 'none' : 'block';
             document.getElementById('customDateContainer').style.display = isCustom ? 'flex' : 'none';
-            document.getElementById('reportTable').innerHTML = ''; // Clear table on switch
+            document.getElementById('reportTable').innerHTML = '';
         }
 
         function prepareReportFilters() {
@@ -415,18 +443,16 @@
 
             const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
 
-            // Build Header Row
             let headerHTML = `<tr><th class="col-name">Student Name</th>`;
             targetDates.forEach(date => {
                 const [y, m, d] = date.split('-');
-                const displayLabel = isCustom ? `${m}/${d}` : d; // Show month/day for custom ranges
+                const displayLabel = isCustom ? `${m}/${d}` : d; 
                 headerHTML += `<th>${displayLabel}</th>`;
             });
             headerHTML += `<th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>`;
             
             let tbodyHTML = '';
 
-            // Build Student Rows
             filteredStudents.forEach(student => {
                 let rowHTML = `<tr><td class="col-name">${student.name}</td>`;
                 let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
