@@ -25,6 +25,7 @@
         .mode-absent { background: #f44336; color: white; }
         .mode-late { background: #2196f3; color: white; }
         .mode-excused { background: #9e9e9e; color: white; } 
+        .mode-edit { background: #607d8b; color: white; }
         .mode-active { outline: 3px solid #333; outline-offset: 2px; }
         .btn-save { background: #673ab7; color: white; }
 
@@ -57,10 +58,14 @@
         .cell-L { color: #2196f3; font-weight: bold; }
         .cell-E { color: #9e9e9e; font-weight: bold; }
 
-        /* Summary Card Styles */
         #individualSummary { display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; justify-content: space-around; align-items: center; font-size: 18px; font-weight: bold; }
         .summary-item { display: flex; flex-direction: column; align-items: center; }
         .summary-label { font-size: 12px; text-transform: uppercase; color: #777; margin-bottom: 5px; }
+
+        .schedule-row { display: flex; flex-wrap: wrap; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .schedule-label { font-weight: bold; width: 150px; }
+        .schedule-checkboxes { display: flex; gap: 15px; flex-wrap: wrap; }
+        .schedule-checkboxes label { cursor: pointer; display: flex; align-items: center; gap: 5px; }
     </style>
 </head>
 <body>
@@ -69,6 +74,7 @@
         <div class="tab-nav">
             <button class="tab-btn active" id="btnTabAttendance" onclick="switchTab('attendance')">Daily Record</button>
             <button class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">Reports</button>
+            <button class="tab-btn" id="btnTabSettings" onclick="switchTab('settings')">Settings</button>
         </div>
         <div style="display: flex; align-items: center; gap: 15px;">
             <div class="clock" id="liveClock">Loading time...</div>
@@ -89,7 +95,7 @@
             
             <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
             <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
-            <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
+            <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete List</button>
         </div>
 
         <div class="toolbar" id="paintbrushTools">
@@ -98,10 +104,12 @@
             <button class="mode-late" onclick="setMode('Late')" id="btn-Late">Late</button>
             <button class="mode-excused" onclick="setMode('Excused')" id="btn-Excused">Excused</button>
             <button class="mode-present" onclick="setMode('Present')" id="btn-Present">Present</button>
+            <button class="mode-edit" onclick="setMode('Edit')" id="btn-Edit">Edit Info</button>
             
             <div style="margin-left: auto; display: flex; gap: 10px;">
                 <button style="background:#4caf50; color:white;" onclick="markAllVisible('Present')">Mark All Present</button>
                 <button style="background:#d32f2f; color:white;" onclick="markAllVisible('Absent')">Mark All Absent</button>
+                <button style="background:#f44336; color:white;" onclick="clearSectionDailyRecord()">Clear Section</button>
                 <button class="btn-save" onclick="saveDailyRecord()">Save Record</button>
             </div>
         </div>
@@ -147,8 +155,18 @@
         <div id="individualSummary"></div>
 
         <div class="table-container">
-            <table id="reportTable">
-                </table>
+            <table id="reportTable"></table>
+        </div>
+    </div>
+
+    <div id="view-settings" style="display: none;">
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0; color: #333;">Daily Section Schedule</h2>
+            <p style="color: #666; margin-bottom: 20px;">Check the days each section meets. Only scheduled sections will appear in the Daily Record tab for that date.</p>
+            
+            <div id="settingsContainer"></div>
+            
+            <button style="background:#4caf50; color:white; margin-top: 20px; width: 100%; padding: 15px;" onclick="saveSettings()">Save Schedule</button>
         </div>
     </div>
 
@@ -166,10 +184,26 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="editStudentModal">
+        <div class="modal-content">
+            <h3 style="margin: 0; color: #333;">Edit Student</h3>
+            <label style="font-size: 14px; color: #666; font-weight: bold;">Full Name</label>
+            <input type="text" id="editStudentName">
+            <label style="font-size: 14px; color: #666; font-weight: bold; margin-top: 5px;">Section</label>
+            <input type="text" id="editStudentSection">
+            <div class="modal-buttons">
+                <button style="background:#e0e0e0; color:#333;" onclick="closeEditStudentModal()">Cancel</button>
+                <button style="background:#673ab7; color:white;" onclick="confirmEditStudent()">Update Info</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let students = []; 
         let attendance = {}; 
         let currentMode = "Absent"; 
+        let sectionSchedule = JSON.parse(localStorage.getItem('sectionSchedule')) || {};
+        let editingOriginalName = "";
 
         function updateClock() {
             const now = new Date();
@@ -192,7 +226,6 @@
         function resetFilters() {
             switchTab('attendance');
             initializeDateInput();
-            document.getElementById('sectionSelect').value = 'all';
             
             if (document.getElementById('reportSectionSelect')) {
                 document.getElementById('reportSectionSelect').value = '';
@@ -208,19 +241,18 @@
             document.getElementById('individualSummary').style.display = 'none';
             
             changeAttendanceDate();
-            renderCards();
         }
 
         function switchTab(tab) {
             document.getElementById('view-attendance').style.display = tab === 'attendance' ? 'block' : 'none';
             document.getElementById('view-reports').style.display = tab === 'reports' ? 'block' : 'none';
+            document.getElementById('view-settings').style.display = tab === 'settings' ? 'block' : 'none';
             
             document.getElementById('btnTabAttendance').className = tab === 'attendance' ? 'tab-btn active' : 'tab-btn';
             document.getElementById('btnTabReports').className = tab === 'reports' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('btnTabSettings').className = tab === 'settings' ? 'tab-btn active' : 'tab-btn';
 
-            if (tab === 'reports') {
-                prepareReportFilters();
-            }
+            if (tab === 'reports') prepareReportFilters();
         }
 
         document.getElementById('csvUpload').addEventListener('change', function(e) {
@@ -254,7 +286,10 @@
             }
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             updateUIForSavedRoster(students.length);
-            populateSectionDropdown(Array.from(sections).sort());
+            
+            const uniqueSections = Array.from(sections).sort();
+            buildSettingsUI(uniqueSections);
+            populateSectionDropdown(uniqueSections);
         }
 
         function updateUIForSavedRoster(count) {
@@ -264,25 +299,77 @@
         }
 
         function clearRoster() {
-            if(confirm("Delete the current student list from memory? You will need to upload a new CSV.")) {
+            if(confirm("Delete the entire student list from memory? You will need to upload a new CSV.")) {
                 localStorage.removeItem('savedStudentRoster');
                 location.reload();
             }
         }
 
-        function populateSectionDropdown(sections) {
-            const selectAtt = document.getElementById('sectionSelect');
-            const selectRep = document.getElementById('reportSectionSelect');
+        // --- NEW: SETTINGS & SCHEDULE LOGIC ---
+        function buildSettingsUI(sections) {
+            const container = document.getElementById('settingsContainer');
+            container.innerHTML = '';
             
-            selectAtt.innerHTML = '<option value="all">Select a Section</option>';
-            selectRep.innerHTML = '<option value="">Select a Section</option>';
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const dayIndices = [1, 2, 3, 4, 5, 6, 0]; // 0 is Sunday in JS getDay()
             
             sections.forEach(sec => {
-                selectAtt.appendChild(new Option(sec, sec));
-                selectRep.appendChild(new Option(sec, sec));
+                let row = document.createElement('div');
+                row.className = 'schedule-row';
+                
+                let title = document.createElement('div');
+                title.className = 'schedule-label';
+                title.innerText = sec;
+                row.appendChild(title);
+                
+                let checkboxContainer = document.createElement('div');
+                checkboxContainer.className = 'schedule-checkboxes';
+                
+                dayIndices.forEach((dayIndex, i) => {
+                    let label = document.createElement('label');
+                    let checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = dayIndex;
+                    checkbox.dataset.section = sec;
+                    
+                    // Default to checked if no schedule exists, otherwise use saved schedule
+                    if (!sectionSchedule[sec]) {
+                        checkbox.checked = true;
+                    } else {
+                        checkbox.checked = sectionSchedule[sec].includes(dayIndex);
+                    }
+                    
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(days[i].substring(0,3)));
+                    checkboxContainer.appendChild(label);
+                });
+                
+                row.appendChild(checkboxContainer);
+                container.appendChild(row);
+            });
+        }
+
+        function saveSettings() {
+            const checkboxes = document.querySelectorAll('#settingsContainer input[type="checkbox"]');
+            sectionSchedule = {};
+            
+            checkboxes.forEach(cb => {
+                const sec = cb.dataset.section;
+                if (!sectionSchedule[sec]) sectionSchedule[sec] = [];
+                if (cb.checked) {
+                    sectionSchedule[sec].push(parseInt(cb.value));
+                }
             });
             
-            if (sections.length > 0) selectAtt.value = sections[0];
+            localStorage.setItem('sectionSchedule', JSON.stringify(sectionSchedule));
+            alert('Weekly schedule saved successfully.');
+            changeAttendanceDate(); // Refresh dropdown immediately
+        }
+
+        function populateSectionDropdown(sections) {
+            const selectRep = document.getElementById('reportSectionSelect');
+            selectRep.innerHTML = '<option value="">Select a Section</option>';
+            sections.forEach(sec => selectRep.appendChild(new Option(sec, sec)));
             changeAttendanceDate(); 
         }
 
@@ -290,14 +377,42 @@
             const selectedDate = document.getElementById('attendanceDate').value;
             if (!selectedDate) return;
             
-            students.forEach(student => {
-                attendance[student.name] = 'Unmarked';
+            // Calculate Day of Week
+            const [y, m, d] = selectedDate.split('-');
+            const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            const dayOfWeek = dateObj.getDay();
+            
+            const allSections = [...new Set(students.map(s => s.section))].sort();
+            const selectAtt = document.getElementById('sectionSelect');
+            const previousSelection = selectAtt.value;
+            
+            selectAtt.innerHTML = '<option value="all">Select a Section</option>';
+            let count = 0;
+            
+            allSections.forEach(sec => {
+                if (sectionSchedule[sec] && !sectionSchedule[sec].includes(dayOfWeek)) return;
+                selectAtt.appendChild(new Option(sec, sec));
+                count++;
             });
             
-            const savedData = JSON.parse(localStorage.getItem('attendance_' + selectedDate));
-            if (savedData) {
-                Object.assign(attendance, savedData);
+            if (count === 0) {
+                selectAtt.options[0].text = "No sections scheduled today";
+            } else {
+                let found = false;
+                for(let i=0; i<selectAtt.options.length; i++) {
+                    if(selectAtt.options[i].value === previousSelection) {
+                        selectAtt.value = previousSelection;
+                        found = true; break;
+                    }
+                }
+                if (!found && selectAtt.options.length > 1) selectAtt.value = selectAtt.options[1].value;
+                else if (!found) selectAtt.value = 'all';
             }
+
+            students.forEach(student => attendance[student.name] = 'Unmarked');
+            
+            const savedData = JSON.parse(localStorage.getItem('attendance_' + selectedDate));
+            if (savedData) Object.assign(attendance, savedData);
             
             renderCards();
         }
@@ -322,8 +437,12 @@
                 card.className = `card status-${status}`;
                 card.innerText = student.name;
                 card.onclick = () => {
-                    attendance[student.name] = currentMode;
-                    renderCards();
+                    if (currentMode === 'Edit') {
+                        openEditStudentModal(student.name, student.section);
+                    } else {
+                        attendance[student.name] = currentMode;
+                        renderCards();
+                    }
                 };
                 grid.appendChild(card);
             });
@@ -331,22 +450,41 @@
 
         function markAllVisible(status) {
             const selectedSection = document.getElementById('sectionSelect').value;
-            if(selectedSection === 'all') {
-                alert("Please select a specific section first.");
-                return;
-            }
+            if(selectedSection === 'all') { alert("Please select a specific section first."); return; }
             students.forEach(student => {
                 if(student.section === selectedSection) attendance[student.name] = status;
             });
             renderCards();
         }
 
-        function saveDailyRecord() {
+        // --- NEW: CLEAR SECTION LOGIC ---
+        function clearSectionDailyRecord() {
+            const section = document.getElementById('sectionSelect').value;
             const dateKey = document.getElementById('attendanceDate').value;
-            if (!dateKey) {
-                alert("Please select a valid date from the calendar.");
+            
+            if (!section || section === 'all') {
+                alert("Please select a specific section to clear.");
                 return;
             }
+            
+            if (confirm(`Delete all saved attendance records for ${section} on ${dateKey}?`)) {
+                students.forEach(student => {
+                    if (student.section === section) attendance[student.name] = 'Unmarked';
+                });
+                
+                let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
+                students.forEach(student => {
+                    if (student.section === section) delete existingData[student.name];
+                });
+                
+                localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
+                renderCards();
+            }
+        }
+
+        function saveDailyRecord() {
+            const dateKey = document.getElementById('attendanceDate').value;
+            if (!dateKey) { alert("Please select a valid date from the calendar."); return; }
             
             let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
             Object.assign(existingData, attendance);
@@ -365,17 +503,16 @@
 
         function loadSavedRoster() {
             initializeDateInput();
-            
             const savedRoster = localStorage.getItem('savedStudentRoster');
             if (savedRoster) {
                 students = JSON.parse(savedRoster);
-                const sections = new Set();
-                students.forEach(student => {
-                    sections.add(student.section);
-                    if(!attendance[student.name]) attendance[student.name] = 'Unmarked';
-                });
+                const uniqueSections = [...new Set(students.map(s => s.section))].sort();
+                
+                students.forEach(student => { if(!attendance[student.name]) attendance[student.name] = 'Unmarked'; });
+                
                 updateUIForSavedRoster(students.length);
-                populateSectionDropdown(Array.from(sections).sort());
+                buildSettingsUI(uniqueSections);
+                populateSectionDropdown(uniqueSections);
             }
         }
 
@@ -395,43 +532,79 @@
             attendance[name] = 'Unmarked';
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             
-            const sections = new Set(students.map(s => s.section));
+            const uniqueSections = [...new Set(students.map(s => s.section))].sort();
             updateUIForSavedRoster(students.length);
-            populateSectionDropdown(Array.from(sections).sort());
+            buildSettingsUI(uniqueSections);
+            populateSectionDropdown(uniqueSections);
             
             document.getElementById('sectionSelect').value = section;
             renderCards();
             closeAddStudentModal();
         }
 
-        // --- REPORTING FUNCTIONS ---
+        // --- NEW: EDIT STUDENT LOGIC ---
+        function openEditStudentModal(name, section) {
+            editingOriginalName = name;
+            document.getElementById('editStudentName').value = name;
+            document.getElementById('editStudentSection').value = section;
+            document.getElementById('editStudentModal').style.display = 'flex';
+        }
 
+        function closeEditStudentModal() {
+            document.getElementById('editStudentModal').style.display = 'none';
+        }
+
+        function confirmEditStudent() {
+            const newName = document.getElementById('editStudentName').value.trim();
+            const newSection = document.getElementById('editStudentSection').value.trim();
+            
+            if (!newName || !newSection) { alert("Name and section cannot be empty."); return; }
+            
+            const studentIndex = students.findIndex(s => s.name === editingOriginalName);
+            if (studentIndex > -1) {
+                students[studentIndex].name = newName;
+                students[studentIndex].section = newSection;
+                
+                if (attendance[editingOriginalName] && newName !== editingOriginalName) {
+                    attendance[newName] = attendance[editingOriginalName];
+                    delete attendance[editingOriginalName];
+                }
+                
+                localStorage.setItem('savedStudentRoster', JSON.stringify(students));
+                
+                const uniqueSections = [...new Set(students.map(s => s.section))].sort();
+                buildSettingsUI(uniqueSections);
+                
+                const selectRep = document.getElementById('reportSectionSelect');
+                const prevRepSel = selectRep.value;
+                selectRep.innerHTML = '<option value="">Select a Section</option>';
+                uniqueSections.forEach(sec => selectRep.appendChild(new Option(sec, sec)));
+                if([...selectRep.options].some(o => o.value === prevRepSel)) selectRep.value = prevRepSel;
+                
+                changeAttendanceDate();
+            }
+            closeEditStudentModal();
+        }
+
+        // --- REPORTING FUNCTIONS ---
         function toggleReportMode() {
             const isCustom = document.getElementById('modeCustom').checked;
             const isIndividual = document.getElementById('modeIndividual').checked;
             
-            // Adjust UI based on mode
             document.getElementById('reportMonthSelect').style.display = isCustom ? 'none' : 'block';
             document.getElementById('customDateContainer').style.display = isCustom ? 'flex' : 'none';
             document.getElementById('reportStudentSelect').style.display = isIndividual ? 'block' : 'none';
             
-            // Clear current view
             document.getElementById('reportTable').innerHTML = '';
             document.getElementById('individualSummary').style.display = 'none';
 
-            // Auto-populate students if switching to individual mode with a section already selected
-            if (isIndividual) {
-                populateReportStudents();
-            } else {
-                generateReport(); 
-            }
+            if (isIndividual) populateReportStudents();
+            else generateReport(); 
         }
 
         function onReportSectionChange() {
             const isIndividual = document.getElementById('modeIndividual').checked;
-            if (isIndividual) {
-                populateReportStudents();
-            }
+            if (isIndividual) populateReportStudents();
             generateReport();
         }
 
@@ -443,9 +616,7 @@
             if (!section) return;
             
             const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
-            filteredStudents.forEach(s => {
-                studentSelect.appendChild(new Option(s.name, s.name));
-            });
+            filteredStudents.forEach(s => studentSelect.appendChild(new Option(s.name, s.name)));
         }
 
         function prepareReportFilters() {
@@ -454,8 +625,7 @@
                 const key = localStorage.key(i);
                 if (key.startsWith('attendance_')) {
                     const datePart = key.replace('attendance_', ''); 
-                    const monthKey = datePart.substring(0, 7);
-                    months.add(monthKey);
+                    months.add(datePart.substring(0, 7));
                 }
             }
 
@@ -494,21 +664,16 @@
                     const key = localStorage.key(i);
                     if (key.startsWith('attendance_')) {
                         const dateStr = key.replace('attendance_', '');
-                        if (dateStr >= startDate && dateStr <= endDate) {
-                            targetDates.push(dateStr);
-                        }
+                        if (dateStr >= startDate && dateStr <= endDate) targetDates.push(dateStr);
                     }
                 }
             } else {
-                // Both Monthly and Individual use the month dropdown logic to get dates
                 const monthKey = document.getElementById('reportMonthSelect').value;
                 if (!monthKey) return;
 
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
-                    if (key.startsWith(`attendance_${monthKey}`)) {
-                        targetDates.push(key.replace('attendance_', ''));
-                    }
+                    if (key.startsWith(`attendance_${monthKey}`)) targetDates.push(key.replace('attendance_', ''));
                 }
             }
 
@@ -519,9 +684,6 @@
                 reportData[date] = JSON.parse(localStorage.getItem(`attendance_${date}`)) || {};
             });
 
-            // -----------------------------
-            // GENERATE INDIVIDUAL REPORT
-            // -----------------------------
             if (isIndividual) {
                 const studentName = document.getElementById('reportStudentSelect').value;
                 if (!studentName) return;
@@ -533,7 +695,6 @@
                     const status = reportData[date][studentName] || 'Unmarked';
                     if (status !== 'Unmarked' && counts[status] !== undefined) counts[status]++;
                     
-                    // Format Date to: Monday, May 26, 2026
                     const [y, m, d] = date.split('-');
                     const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
                     const formattedDate = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -548,7 +709,6 @@
                     tbodyHTML += `<tr><td style="text-align: left;">${formattedDate}</td><td class="${cellClass}">${displayStatus}</td></tr>`;
                 });
 
-                // Inject Summary Card
                 summaryDiv.innerHTML = `
                     <div class="summary-item"><span class="summary-label">Present</span><span style="color: #4caf50;">${counts.Present}</span></div>
                     <div class="summary-item"><span class="summary-label">Absent</span><span style="color: #f44336;">${counts.Absent}</span></div>
@@ -556,14 +716,9 @@
                     <div class="summary-item"><span class="summary-label">Excused</span><span style="color: #9e9e9e;">${counts.Excused}</span></div>
                 `;
                 summaryDiv.style.display = 'flex';
-
                 table.innerHTML = `<thead><tr><th style="text-align: left;">Date</th><th>Record</th></tr></thead><tbody>${tbodyHTML}</tbody>`;
 
-            } 
-            // -----------------------------
-            // GENERATE CLASS TABLE REPORT
-            // -----------------------------
-            else {
+            } else {
                 const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
 
                 let headerHTML = `<tr><th class="col-name">Student Name</th>`;
@@ -615,7 +770,6 @@
                 const studentName = document.getElementById('reportStudentSelect').value;
                 const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
                 
-                // Add header info for the individual export
                 csvContent += `Student:,${studentName}\nSection:,${section}\nMonth:,${month}\n\n`;
                 
                 for (let i = 0; i < table.rows.length; i++) {
