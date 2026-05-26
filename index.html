@@ -305,13 +305,12 @@
             }
         }
 
-        // --- NEW: SETTINGS & SCHEDULE LOGIC ---
         function buildSettingsUI(sections) {
             const container = document.getElementById('settingsContainer');
             container.innerHTML = '';
             
             const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-            const dayIndices = [1, 2, 3, 4, 5, 6, 0]; // 0 is Sunday in JS getDay()
+            const dayIndices = [1, 2, 3, 4, 5, 6, 0]; 
             
             sections.forEach(sec => {
                 let row = document.createElement('div');
@@ -332,7 +331,6 @@
                     checkbox.value = dayIndex;
                     checkbox.dataset.section = sec;
                     
-                    // Default to checked if no schedule exists, otherwise use saved schedule
                     if (!sectionSchedule[sec]) {
                         checkbox.checked = true;
                     } else {
@@ -363,7 +361,7 @@
             
             localStorage.setItem('sectionSchedule', JSON.stringify(sectionSchedule));
             alert('Weekly schedule saved successfully.');
-            changeAttendanceDate(); // Refresh dropdown immediately
+            changeAttendanceDate(); 
         }
 
         function populateSectionDropdown(sections) {
@@ -377,7 +375,6 @@
             const selectedDate = document.getElementById('attendanceDate').value;
             if (!selectedDate) return;
             
-            // Calculate Day of Week
             const [y, m, d] = selectedDate.split('-');
             const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
             const dayOfWeek = dateObj.getDay();
@@ -457,12 +454,11 @@
             renderCards();
         }
 
-        // --- NEW: CLEAR SECTION LOGIC ---
         function clearSectionDailyRecord() {
             const section = document.getElementById('sectionSelect').value;
             const dateKey = document.getElementById('attendanceDate').value;
             
-            if (!section || section === 'all') {
+            if (!section || section === 'all' || section === 'No sections scheduled today') {
                 alert("Please select a specific section to clear.");
                 return;
             }
@@ -542,7 +538,6 @@
             closeAddStudentModal();
         }
 
-        // --- NEW: EDIT STUDENT LOGIC ---
         function openEditStudentModal(name, section) {
             editingOriginalName = name;
             document.getElementById('editStudentName').value = name;
@@ -586,7 +581,6 @@
             closeEditStudentModal();
         }
 
-        // --- REPORTING FUNCTIONS ---
         function toggleReportMode() {
             const isCustom = document.getElementById('modeCustom').checked;
             const isIndividual = document.getElementById('modeIndividual').checked;
@@ -692,14 +686,16 @@
                 let tbodyHTML = '';
 
                 targetDates.forEach(date => {
-                    const status = reportData[date][studentName] || 'Unmarked';
+                    let status = reportData[date][studentName];
+                    if (!status) status = 'Unmarked';
+                    
                     if (status !== 'Unmarked' && counts[status] !== undefined) counts[status]++;
                     
                     const [y, m, d] = date.split('-');
                     const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
                     const formattedDate = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
                     
-                    const displayStatus = status === 'Unmarked' ? '-' : status;
+                    const displayStatus = (status === 'Unmarked' || status === '-') ? '-' : status;
                     let cellClass = '';
                     if (status === 'Present') cellClass = 'cell-P';
                     else if (status === 'Absent') cellClass = 'cell-A';
@@ -736,11 +732,13 @@
                     let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
 
                     targetDates.forEach(date => {
-                        const status = reportData[date][student.name] || '-';
+                        let status = reportData[date][student.name];
+                        if (!status) status = 'Unmarked';
+                        
                         if (counts[status] !== undefined) counts[status]++;
                         
-                        const displayChar = status === '-' ? '-' : status.charAt(0);
-                        const cellClass = status !== '-' ? `cell-${displayChar}` : '';
+                        const displayChar = (status === 'Unmarked' || status === '-') ? '-' : status.charAt(0);
+                        const cellClass = (status !== 'Unmarked' && status !== '-') ? `cell-${displayChar}` : '';
                         rowHTML += `<td class="${cellClass}">${displayChar}</td>`;
                     });
 
