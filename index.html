@@ -13,6 +13,11 @@
         .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .clock { font-size: 18px; font-weight: bold; color: #333; }
         
+        /* Tab Navigation Styles */
+        .tab-nav { display: flex; gap: 10px; }
+        .tab-btn { padding: 10px 20px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; background: #e0e0e0; color: #555; }
+        .tab-btn.active { background: #673ab7; color: white; }
+
         .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); align-items: center; }
         select, button, input { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #ccc; }
         button { cursor: pointer; border: none; font-weight: bold; }
@@ -37,47 +42,80 @@
         .status-Late { background: #e3f2fd; border-color: #2196f3; }
         .status-Excused { background: #f5f5f5; border-color: #9e9e9e; } 
 
-        /* Modal Styles */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 25px; border-radius: 8px; width: 320px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .modal-content input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
         .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+
+        /* Report Table Styles */
+        .table-container { overflow-x: auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; white-space: nowrap; }
+        th { background-color: #f4f4f9; font-weight: bold; }
+        .col-name { text-align: left; position: sticky; left: 0; background: white; z-index: 1; font-weight: bold; }
+        th.col-name { background: #f4f4f9; }
+        .cell-P { color: #4caf50; font-weight: bold; }
+        .cell-A { color: #f44336; font-weight: bold; }
+        .cell-L { color: #2196f3; font-weight: bold; }
+        .cell-E { color: #9e9e9e; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2 style="margin: 0;">Attendance App</h2>
+        <div class="tab-nav">
+            <button class="tab-btn active" id="btnTabAttendance" onclick="switchTab('attendance')">Daily Record</button>
+            <button class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">Monthly Reports</button>
+        </div>
         <div class="clock" id="liveClock">Loading time...</div>
     </div>
 
-    <div class="toolbar" id="fileUploadContainer">
-        <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
-        <input type="file" id="csvUpload" accept=".csv">
+    <div id="view-attendance">
+        <div class="toolbar" id="fileUploadContainer">
+            <button style="background:#e0e0e0; color:#333;" onclick="downloadTemplate()">Get Template</button>
+            <input type="file" id="csvUpload" accept=".csv">
+        </div>
+
+        <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
+            <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
+            <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
+            <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
+            <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
+        </div>
+
+        <div class="toolbar" id="paintbrushTools">
+            <strong>Paintbrush:</strong>
+            <button class="mode-absent mode-active" onclick="setMode('Absent')" id="btn-Absent">Absent</button>
+            <button class="mode-late" onclick="setMode('Late')" id="btn-Late">Late</button>
+            <button class="mode-excused" onclick="setMode('Excused')" id="btn-Excused">Excused</button>
+            <button class="mode-present" onclick="setMode('Present')" id="btn-Present">Present</button>
+            
+            <div style="margin-left: auto; display: flex; gap: 10px;">
+                <button style="background:#4caf50; color:white;" onclick="markAllVisible('Present')">Mark All Present</button>
+                <button style="background:#d32f2f; color:white;" onclick="markAllVisible('Absent')">Mark All Absent</button>
+                <button class="btn-save" onclick="saveDailyRecord()">Save Record</button>
+            </div>
+        </div>
+
+        <div class="grid" id="studentGrid"></div>
     </div>
 
-    <div class="toolbar" id="rosterStatusContainer" style="display: none; background: #e8f5e9; border: 1px solid #4caf50;">
-        <span style="font-weight: bold; color: #2e7d32; flex-grow: 1;" id="rosterStatusText">Roster Loaded</span>
-        <select id="sectionSelect" onchange="renderCards()" style="font-weight: bold;"></select>
-        <button style="background:#2196f3; color:white;" onclick="openAddStudentModal()">+ Add Student</button>
-        <button style="background:#d32f2f; color:white;" onclick="clearRoster()">Delete & Update</button>
-    </div>
-
-    <div class="toolbar" id="paintbrushTools">
-        <strong>Paintbrush:</strong>
-        <button class="mode-absent mode-active" onclick="setMode('Absent')" id="btn-Absent">Absent</button>
-        <button class="mode-late" onclick="setMode('Late')" id="btn-Late">Late</button>
-        <button class="mode-excused" onclick="setMode('Excused')" id="btn-Excused">Excused</button>
-        <button class="mode-present" onclick="setMode('Present')" id="btn-Present">Present</button>
+    <div id="view-reports" style="display: none;">
+        <div class="toolbar">
+            <select id="reportMonthSelect" onchange="generateReport()" style="font-weight: bold;">
+                <option value="">Select Month</option>
+            </select>
+            <select id="reportSectionSelect" onchange="generateReport()" style="font-weight: bold;">
+                <option value="">Select Section</option>
+            </select>
+            <button style="background:#4caf50; color:white; margin-left:auto;" onclick="exportReportCSV()">Export Monthly CSV</button>
+        </div>
         
-        <div style="margin-left: auto; display: flex; gap: 10px;">
-            <button style="background:#4caf50; color:white;" onclick="markAllVisible('Present')">Mark All Present</button>
-            <button style="background:#d32f2f; color:white;" onclick="markAllVisible('Absent')">Mark All Absent</button>
-            <button class="btn-save" onclick="saveDailyRecord()">Save Record</button>
+        <div class="table-container">
+            <table id="reportTable">
+                </table>
         </div>
     </div>
-
-    <div class="grid" id="studentGrid"></div>
 
     <div class="modal-overlay" id="addStudentModal">
         <div class="modal-content">
@@ -108,14 +146,24 @@
         setInterval(updateClock, 1000);
         updateClock();
 
+        function switchTab(tab) {
+            document.getElementById('view-attendance').style.display = tab === 'attendance' ? 'block' : 'none';
+            document.getElementById('view-reports').style.display = tab === 'reports' ? 'block' : 'none';
+            
+            document.getElementById('btnTabAttendance').className = tab === 'attendance' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('btnTabReports').className = tab === 'reports' ? 'tab-btn active' : 'tab-btn';
+
+            if (tab === 'reports') {
+                prepareReportFilters();
+            }
+        }
+
         document.getElementById('csvUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
-            
             const reader = new FileReader();
             reader.onload = function(event) {
-                const text = event.target.result;
-                parseCSV(text);
+                parseCSV(event.target.result);
             };
             reader.readAsText(file);
         });
@@ -130,18 +178,15 @@
                 if(!line) continue;
                 
                 const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                
                 if(cols.length >= 4) {
                     const name = cols[0].replace(/(^"|"$)/g, '').trim();
                     const section = cols[3].replace(/(^"|"$)/g, '').trim();
                     
                     students.push({ name: name, section: section });
                     sections.add(section);
-                    
                     if(!attendance[name]) attendance[name] = 'Unmarked';
                 }
             }
-            
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             updateUIForSavedRoster(students.length);
             populateSectionDropdown(Array.from(sections).sort());
@@ -161,25 +206,22 @@
         }
 
         function populateSectionDropdown(sections) {
-            const select = document.getElementById('sectionSelect');
-            select.innerHTML = '<option value="all">Select a Section</option>';
+            const selectAtt = document.getElementById('sectionSelect');
+            const selectRep = document.getElementById('reportSectionSelect');
+            
+            selectAtt.innerHTML = '<option value="all">Select a Section</option>';
+            selectRep.innerHTML = '<option value="">Select a Section</option>';
+            
             sections.forEach(sec => {
-                const option = document.createElement('option');
-                option.value = sec;
-                option.innerText = sec;
-                select.appendChild(option);
+                selectAtt.appendChild(new Option(sec, sec));
+                selectRep.appendChild(new Option(sec, sec));
             });
             
             const dateKey = new Date().toISOString().split('T')[0];
             const savedData = JSON.parse(localStorage.getItem('attendance_' + dateKey));
-            if (savedData) {
-                attendance = savedData;
-            }
+            if (savedData) attendance = savedData;
 
-            if (sections.length > 0) {
-                select.value = sections[0];
-            }
-
+            if (sections.length > 0) selectAtt.value = sections[0];
             renderCards();
         }
 
@@ -192,7 +234,6 @@
         function renderCards() {
             const grid = document.getElementById('studentGrid');
             grid.innerHTML = '';
-            
             const selectedSection = document.getElementById('sectionSelect').value;
             if(selectedSection === 'all') return; 
             
@@ -217,35 +258,25 @@
                 alert("Please select a specific section first.");
                 return;
             }
-            
             students.forEach(student => {
-                if(student.section === selectedSection) {
-                    attendance[student.name] = status;
-                }
+                if(student.section === selectedSection) attendance[student.name] = status;
             });
             renderCards();
         }
 
         function saveDailyRecord() {
             const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const dateKey = `${year}-${month}-${day}`;
+            const dateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
             
             let existingData = JSON.parse(localStorage.getItem('attendance_' + dateKey)) || {};
             Object.assign(existingData, attendance);
-            
             localStorage.setItem('attendance_' + dateKey, JSON.stringify(existingData));
             alert("Attendance successfully saved for " + dateKey);
         }
 
         function downloadTemplate() {
-            const csvContent = "Name,Gender,Grade,Section\n";
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", url);
+            link.setAttribute("href", URL.createObjectURL(new Blob(["Name,Gender,Grade,Section\n"], { type: 'text/csv;charset=utf-8;' })));
             link.setAttribute("download", "Student_List_Template.csv");
             document.body.appendChild(link);
             link.click();
@@ -257,57 +288,148 @@
             if (savedRoster) {
                 students = JSON.parse(savedRoster);
                 const sections = new Set();
-                
                 students.forEach(student => {
                     sections.add(student.section);
-                    if(!attendance[student.name]) {
-                        attendance[student.name] = 'Unmarked';
-                    }
+                    if(!attendance[student.name]) attendance[student.name] = 'Unmarked';
                 });
-                
                 updateUIForSavedRoster(students.length);
                 populateSectionDropdown(Array.from(sections).sort());
             }
         }
 
-        function openAddStudentModal() {
-            document.getElementById('addStudentModal').style.display = 'flex';
-        }
-
+        function openAddStudentModal() { document.getElementById('addStudentModal').style.display = 'flex'; }
+        
         function closeAddStudentModal() {
             document.getElementById('addStudentModal').style.display = 'none';
-            document.getElementById('newStudentName').value = '';
-            document.getElementById('newStudentGender').value = '';
-            document.getElementById('newStudentGrade').value = '';
-            document.getElementById('newStudentSection').value = '';
+            ['Name', 'Gender', 'Grade', 'Section'].forEach(id => document.getElementById('newStudent'+id).value = '');
         }
 
         function saveNewStudent() {
             const name = document.getElementById('newStudentName').value.trim();
             const section = document.getElementById('newStudentSection').value.trim();
-            
-            if (!name || !section) {
-                alert("Please enter at least a Name and Section.");
-                return;
-            }
+            if (!name || !section) { alert("Please enter at least a Name and Section."); return; }
 
             students.push({ name: name, section: section });
             attendance[name] = 'Unmarked';
-            
             localStorage.setItem('savedStudentRoster', JSON.stringify(students));
             
-            const sections = new Set();
-            students.forEach(s => sections.add(s.section));
-            
+            const sections = new Set(students.map(s => s.section));
             updateUIForSavedRoster(students.length);
             populateSectionDropdown(Array.from(sections).sort());
             
             document.getElementById('sectionSelect').value = section;
             renderCards();
-
             closeAddStudentModal();
         }
-        
+
+        // --- NEW REPORTING FUNCTIONS ---
+
+        function prepareReportFilters() {
+            const months = new Set();
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('attendance_')) {
+                    const datePart = key.replace('attendance_', ''); 
+                    const monthKey = datePart.substring(0, 7); // Extracts YYYY-MM
+                    months.add(monthKey);
+                }
+            }
+
+            const monthSelect = document.getElementById('reportMonthSelect');
+            monthSelect.innerHTML = '<option value="">Select Month</option>';
+            
+            Array.from(months).sort().reverse().forEach(month => {
+                const [yyyy, mm] = month.split('-');
+                const dateObj = new Date(yyyy, mm - 1);
+                const monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+                monthSelect.appendChild(new Option(monthName, month));
+            });
+        }
+
+        function generateReport() {
+            const monthKey = document.getElementById('reportMonthSelect').value;
+            const section = document.getElementById('reportSectionSelect').value;
+            const table = document.getElementById('reportTable');
+            table.innerHTML = '';
+
+            if (!monthKey || !section) return;
+
+            // Gather all dates for this month from memory
+            let monthDates = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith(`attendance_${monthKey}`)) {
+                    monthDates.push(key.replace('attendance_', ''));
+                }
+            }
+            monthDates.sort(); // Order from 1st to 31st
+
+            // Retrieve data for those dates
+            const monthlyData = {};
+            monthDates.forEach(date => {
+                monthlyData[date] = JSON.parse(localStorage.getItem(`attendance_${date}`)) || {};
+            });
+
+            const filteredStudents = students.filter(s => s.section === section).sort((a, b) => a.name.localeCompare(b.name));
+
+            // Build Header Row
+            let headerHTML = `<tr><th class="col-name">Student Name</th>`;
+            monthDates.forEach(date => {
+                const day = date.split('-')[2]; // Just show the day number
+                headerHTML += `<th>${day}</th>`;
+            });
+            headerHTML += `<th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>`;
+            
+            let tbodyHTML = '';
+
+            // Build Student Rows
+            filteredStudents.forEach(student => {
+                let rowHTML = `<tr><td class="col-name">${student.name}</td>`;
+                let counts = { Present: 0, Absent: 0, Late: 0, Excused: 0 };
+
+                monthDates.forEach(date => {
+                    const status = monthlyData[date][student.name] || '-';
+                    if (counts[status] !== undefined) counts[status]++;
+                    
+                    const displayChar = status === '-' ? '-' : status.charAt(0);
+                    const cellClass = status !== '-' ? `cell-${displayChar}` : '';
+                    rowHTML += `<td class="${cellClass}">${displayChar}</td>`;
+                });
+
+                rowHTML += `<td class="cell-P">${counts.Present}</td>
+                            <td class="cell-A">${counts.Absent}</td>
+                            <td class="cell-L">${counts.Late}</td>
+                            <td class="cell-E">${counts.Excused}</td></tr>`;
+                tbodyHTML += rowHTML;
+            });
+
+            table.innerHTML = `<thead>${headerHTML}</thead><tbody>${tbodyHTML}</tbody>`;
+        }
+
+        function exportReportCSV() {
+            const table = document.getElementById('reportTable');
+            if(table.rows.length === 0) { alert("Please generate a report first."); return; }
+
+            let csvContent = "";
+            for (let i = 0; i < table.rows.length; i++) {
+                let rowData = [];
+                for (let j = 0; j < table.rows[i].cells.length; j++) {
+                    rowData.push(`"${table.rows[i].cells[j].innerText}"`);
+                }
+                csvContent += rowData.join(",") + "\n";
+            }
+
+            const month = document.getElementById('reportMonthSelect').options[document.getElementById('reportMonthSelect').selectedIndex].text;
+            const section = document.getElementById('reportSectionSelect').value;
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })));
+            link.setAttribute("download", `Report_${section}_${month}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         loadSavedRoster();
 
     </script>
